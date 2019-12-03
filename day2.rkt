@@ -2,6 +2,9 @@
 
 (require rackunit)
 
+(provide read-program
+         exe)
+
 
 (define (val-at lst pos)
   (first (drop lst pos)))
