@@ -30,7 +30,8 @@
         (steps->lines (rest steps) next (cons line lines)))))
 
 (module+ test
-  (check-equal? (steps->lines '("R8" "U5" "L5" "D3")) '(((3 5 18) (3 2 21)) ((8 5 13) (3 5 18)) ((8 0 8) (8 5 13)) ((0 0 0) (8 0 8)))))
+  (check-equal? (steps->lines '("R8" "U5" "L5" "D3"))
+                '(((3 5 18) (3 2 21)) ((8 5 13) (3 5 18)) ((8 0 8) (8 5 13)) ((0 0 0) (8 0 8)))))
 
 (define (x0 line) (x (first line)))
 (define (y0 line) (y (first line)))
@@ -47,20 +48,24 @@
               (> (y0 l1) (y0 l2) (y1 l1)))  ; l1 span l2?
           (or (< (x0 l2) (x0 l1) (x1 l2))
               (> (x0 l2) (x0 l1) (x1 l2)))) ; l2 span l1?
-     (list (x0 l1) (y0 l2) (+ (d0 l1)
-                              (if (< (y0 l1) (y0 l2)) (- (y0 l2) (y0 l1)) (- (y0 l1) (y0 l2)))
-                              (d0 l2)
-                              (if (< (x0 l1) (x0 l2)) (- (x0 l2) (x0 l1)) (- (x0 l1) (x0 l2)))))]
+     (list (x0 l1) (y0 l2)
+           ; add total delay from both lines
+           (+ (d0 l1)
+              (if (< (y0 l1) (y0 l2)) (- (y0 l2) (y0 l1)) (- (y0 l1) (y0 l2)))
+              (d0 l2)
+              (if (< (x0 l1) (x0 l2)) (- (x0 l2) (x0 l1)) (- (x0 l1) (x0 l2)))))]
     [(and (= (y0 l1) (y1 l1))   ; l1 horizontal
           (= (x0 l2) (x1 l2))   ; l2 vertical
           (or (< (x0 l1) (x0 l2) (x1 l1))
               (> (x0 l1) (x0 l2) (x1 l1)))  ; l1 span l2?
           (or (< (y0 l2) (y0 l1) (y1 l2))
               (> (y0 l2) (y0 l1) (y1 l2)))) ; l2 span l1?
-     (list (x0 l2) (y0 l1) (+ (d0 l1)
-                              (if (< (x0 l1) (x0 l2)) (- (x0 l2) (x0 l1)) (- (x0 l1) (x0 l2)))
-                              (d0 l2)
-                              (if (< (y0 l1) (y0 l2)) (- (y0 l2) (y0 l1)) (- (y0 l1) (y0 l2)))))]
+     (list (x0 l2) (y0 l1)
+           ; add total delay from both lines
+           (+ (d0 l1)
+              (if (< (x0 l1) (x0 l2)) (- (x0 l2) (x0 l1)) (- (x0 l1) (x0 l2)))
+              (d0 l2)
+              (if (< (y0 l1) (y0 l2)) (- (y0 l2) (y0 l1)) (- (y0 l1) (y0 l2)))))]
     [else '()]))
 
 (module+ test
