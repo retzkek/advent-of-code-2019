@@ -28,17 +28,36 @@
         [dest (fourth args)])
     (exe (sub-at prog dest (op (val-at prog a) (val-at prog b))) (+ step 4))))
 
+(define (op-input prog args step)
+  (let ([inp (read)]
+        [dest (second args)])
+    (exe (sub-at prog dest inp) (+ step 2))))
+
+(define (op-output prog args step)
+  (let* ([src (second args)]
+         [val (val-at prog src)])
+    (write val)
+    (exe prog (+ step 2))))
+
 (define (exe prog step)
   (let* ([args (drop prog step)]
          [opcode (first args)])
     (cond
       [(eq? opcode 99) prog]
       [(eq? opcode 1) (op2 + prog args step)]
-      [(eq? opcode 2) (op2 * prog args step)])))
+      [(eq? opcode 2) (op2 * prog args step)]
+      [(eq? opcode 3) (op-input prog args step)]
+      [(eq? opcode 4) (op-output prog args step)])))
 
 (module+ test
   (check-equal? (exe '(1 4 5 4 11 88) 0) '(1 4 5 4 99 88))
-  (check-equal? (exe '(2 4 5 4 3 33) 0) '(2 4 5 4 99 33)))
+  (check-equal? (exe '(2 4 5 4 3 33) 0) '(2 4 5 4 99 33))
+  (parameterize ([current-input-port (open-input-string "23")])
+    (check-equal? (exe '(3 3 99 0) 0) '(3 3 99 23)))
+  (let ([out (open-output-string)])
+    (parameterize ([current-output-port out])
+      (check-equal? (exe '(4 3 99 23) 0) '(4 3 99 23))
+      (check-equal? (get-output-string out) "23"))))
 
 (define (read-program ip)
   (map string->number (string-split (read-line ip) ",")))
