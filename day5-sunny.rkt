@@ -47,7 +47,7 @@
 
 (define (op-output prog args step modes)
   (let* ([val (param (first modes) (second args) prog)])
-    (write val)
+    (writeln val)
     (exe prog (+ step 2))))
 
 (define (exe prog step)
@@ -71,7 +71,8 @@
   (let ([out (open-output-string)])
     (parameterize ([current-output-port out])
       (check-equal? (exe '(4 3 99 23) 0) '(4 3 99 23))
-      (check-equal? (get-output-string out) "23"))))
+      (check-equal? (get-output-string out) "23\n")))
+  (check-equal? (exe '(1002 4 3 4 33) 0) '(1002 4 3 4 99)))
 
 (define (read-program ip)
   (map string->number (string-split (read-line ip) ",")))
@@ -91,4 +92,4 @@
   (check-program "1,1,1,4,99,5,6,0,99" "30,1,1,4,2,5,6,0,99"))
 
 (module+ main
-  (display (exe (append '(1 12 2) (drop (read-program (current-input-port)) 3)) 0)))
+  (display (exe (read-program (current-input-port)) 0)))
