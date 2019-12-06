@@ -22,32 +22,46 @@
   (check-equal? (sub-at '(1 2 3) 1 9) '(1 9 3))
   (check-equal? (sub-at '(1 2 3) 2 9) '(1 2 9)))
 
-(define-syntax-rule (op2 op prog args step)
-  (let ([a (second args)]
-        [b (third args)]
-        [dest (fourth args)])
-    (exe (sub-at prog dest (op (val-at prog a) (val-at prog b))) (+ step 4))))
+(define (int->list n len)
+  (map (λ (x) (remainder (quotient n (expt 10 x)) 10)) (range len)))
 
-(define (op-input prog args step)
+(module+ test
+  (check-equal? (int->list 1234 4) '(4 3 2 1))
+  (check-equal? (int->list 4 4) '(4 0 0 0)))
+
+(define-syntax-rule (param mode arg prog)
+  (if (eq? mode 0)
+      (val-at prog arg)
+      arg))
+
+(define-syntax-rule (op2 op prog args step modes)
+  (let* ([a (param (first modes) (second args) prog)]
+         [b (param (second modes) (third args) prog)]
+         [dest (fourth args)])
+    (exe (sub-at prog dest (op a b)) (+ step 4))))
+
+(define (op-input prog args step modes)
   (let ([inp (read)]
         [dest (second args)])
     (exe (sub-at prog dest inp) (+ step 2))))
 
-(define (op-output prog args step)
-  (let* ([src (second args)]
-         [val (val-at prog src)])
+(define (op-output prog args step modes)
+  (let* ([val (param (first modes) (second args) prog)])
     (write val)
     (exe prog (+ step 2))))
 
 (define (exe prog step)
   (let* ([args (drop prog step)]
-         [opcode (first args)])
+         [opmodes (first args)]
+         [opcode (remainder opmodes 100)]
+         [modecode (quotient opmodes 100)]
+         [modes (int->list modecode 3)])
     (cond
       [(eq? opcode 99) prog]
-      [(eq? opcode 1) (op2 + prog args step)]
-      [(eq? opcode 2) (op2 * prog args step)]
-      [(eq? opcode 3) (op-input prog args step)]
-      [(eq? opcode 4) (op-output prog args step)])))
+      [(eq? opcode 1) (op2 + prog args step modes)]
+      [(eq? opcode 2) (op2 * prog args step modes)]
+      [(eq? opcode 3) (op-input prog args step modes)]
+      [(eq? opcode 4) (op-output prog args step modes)])))
 
 (module+ test
   (check-equal? (exe '(1 4 5 4 11 88) 0) '(1 4 5 4 99 88))
