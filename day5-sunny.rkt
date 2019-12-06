@@ -66,16 +66,16 @@
          [opcode (remainder opmodes 100)]
          [modecode (quotient opmodes 100)]
          [modes (int->list modecode 3)])
-    (cond
-      [(eq? opcode 99) prog]
-      [(eq? opcode 1) (op2 + prog args step modes)]
-      [(eq? opcode 2) (op2 * prog args step modes)]
-      [(eq? opcode 3) (op-input prog args step modes)]
-      [(eq? opcode 4) (op-output prog args step modes)]
-      [(eq? opcode 5) (op-jump (λ (x) (not (eq? x 0))) prog args step modes)]
-      [(eq? opcode 6) (op-jump (λ (x) (eq? x 0)) prog args step modes)]
-      [(eq? opcode 7) (op-cmp < prog args step modes)]
-      [(eq? opcode 8) (op-cmp = prog args step modes)])))
+    (case opcode
+      [(99) prog]
+      [(1) (op2 + prog args step modes)]
+      [(2) (op2 * prog args step modes)]
+      [(3) (op-input prog args step modes)]
+      [(4) (op-output prog args step modes)]
+      [(5) (op-jump (λ (x) (not (eq? x 0))) prog args step modes)]
+      [(6) (op-jump (λ (x) (eq? x 0)) prog args step modes)]
+      [(7) (op-cmp < prog args step modes)]
+      [(8) (op-cmp = prog args step modes)])))
 
 (module+ test
   (check-equal? (exe '(1 4 5 4 11 88) 0) '(1 4 5 4 99 88))
