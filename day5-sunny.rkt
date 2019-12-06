@@ -41,9 +41,8 @@
     (exe (sub-at prog dest (op a b)) (+ step 4))))
 
 (define (op-input prog args step modes)
-  (let ([inp (read)]
-        [dest (second args)])
-    (exe (sub-at prog dest inp) (+ step 2))))
+  (display "> ")
+  (exe (sub-at prog (second args) (read)) (+ step 2)))
 
 (define (op-output prog args step modes)
   (let* ([val (param (first modes) (second args) prog)])
@@ -92,4 +91,12 @@
   (check-program "1,1,1,4,99,5,6,0,99" "30,1,1,4,2,5,6,0,99"))
 
 (module+ main
-  (display (exe (read-program (current-input-port)) 0)))
+  (display
+   (exe
+    (read-program
+     (open-input-file
+      (command-line
+       #:program "intcode"
+       #:args (filename)
+       filename)))
+    0)))
