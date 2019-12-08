@@ -41,11 +41,11 @@
     (exe (sub-at prog dest (op a b)) (+ step 4))))
 
 (define (op-input prog args step modes)
-  (display "> ")
+  #;(display "> ")
   (exe (sub-at prog (second args) (read)) (+ step 2)))
 
 (define (op-output prog args step modes)
-  (writeln (param (first modes) (second args) prog))
+  (write (param (first modes) (second args) prog))
   (exe prog (+ step 2)))
 
 (define (op-jump f prog args step modes)
@@ -85,7 +85,7 @@
   (let ([out (open-output-string)])
     (parameterize ([current-output-port out])
       (check-equal? (exe '(4 3 99 23) 0) '(4 3 99 23))
-      (check-equal? (get-output-string out) "23\n")))
+      (check-equal? (get-output-string out) "23")))
   (check-equal? (exe '(1002 4 3 4 33) 0) '(1002 4 3 4 99)))
 
 (define (read-program ip)
@@ -113,32 +113,55 @@
       (check-equal? (get-output-string out) stdout))))
 
 (module+ test
-  (check-program-io "3,9,8,9,10,9,4,9,99,-1,8" "8" "> 1\n")
-  (check-program-io "3,9,8,9,10,9,4,9,99,-1,8" "2" "> 0\n")
-  (check-program-io "3,9,7,9,10,9,4,9,99,-1,8" "2" "> 1\n")
-  (check-program-io "3,9,7,9,10,9,4,9,99,-1,8" "10" "> 0\n")
-  (check-program-io "3,3,1108,-1,8,3,4,3,99" "8" "> 1\n")
-  (check-program-io "3,3,1108,-1,8,3,4,3,99" "2" "> 0\n")
-  (check-program-io "3,3,1107,-1,8,3,4,3,99" "2" "> 1\n")
-  (check-program-io "3,3,1107,-1,8,3,4,3,99" "10" "> 0\n")
-  (check-program-io "3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9" "0" "> 0\n")
-  (check-program-io "3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9" "22" "> 1\n")
-  (check-program-io "3,3,1105,-1,9,1101,0,0,12,4,12,99,1" "0" "> 0\n")
-  (check-program-io "3,3,1105,-1,9,1101,0,0,12,4,12,99,1" "22" "> 1\n")
+  (check-program-io "3,9,8,9,10,9,4,9,99,-1,8" "8" "1")
+  (check-program-io "3,9,8,9,10,9,4,9,99,-1,8" "2" "0")
+  (check-program-io "3,9,7,9,10,9,4,9,99,-1,8" "2" "1")
+  (check-program-io "3,9,7,9,10,9,4,9,99,-1,8" "10" "0")
+  (check-program-io "3,3,1108,-1,8,3,4,3,99" "8" "1")
+  (check-program-io "3,3,1108,-1,8,3,4,3,99" "2" "0")
+  (check-program-io "3,3,1107,-1,8,3,4,3,99" "2" "1")
+  (check-program-io "3,3,1107,-1,8,3,4,3,99" "10" "0")
+  (check-program-io "3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9" "0" "0")
+  (check-program-io "3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9" "22" "1")
+  (check-program-io "3,3,1105,-1,9,1101,0,0,12,4,12,99,1" "0" "0")
+  (check-program-io "3,3,1105,-1,9,1101,0,0,12,4,12,99,1" "22" "1")
   (check-program-io "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
-                    "2" "> 999\n")
+                    "2" "999")
   (check-program-io "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
-                    "8" "> 1000\n")
+                    "8" "1000")
   (check-program-io "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
-                    "9" "> 1001\n"))
+                    "9" "1001"))
+
+(define (amps program phases)
+  (foldl
+   (λ (ɸ inp)
+     (let ([out (open-output-string)]
+           [in (format "~a ~a" ɸ inp)])
+       (parameterize ([current-input-port (open-input-string in)]
+                      [current-output-port out])
+         (exe (read-program (open-input-string program)) 0)
+         (string->number (get-output-string out)))))
+   0
+   phases))
+
+(module+ test
+  (check-equal? (amps "3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0" '(4 3 2 1 0)) 43210)
+  (check-equal? (amps "3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0" '(0 1 2 3 4)) 54321)
+  (check-equal? (amps "3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0" '(1 0 4 3 2)) 65210))
+
+(define (max-phases program)
+  (argmax ((curry amps) program) (permutations (range 5))))
+
+(module+ test
+  (check-equal? (max-phases "3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0") '(4 3 2 1 0))
+  (check-equal? (max-phases "3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0")  '(0 1 2 3 4))
+  (check-equal? (max-phases "3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0") '(1 0 4 3 2)))
 
 (module+ main
-  (display
-   (exe
-    (read-program
-     (open-input-file
-      (command-line
-       #:program "intcode"
-       #:args (filename)
-       filename)))
-    0)))
+  (let ([program (read-line
+                  (open-input-file
+                   (command-line
+                    #:program "intcode"
+                    #:args (filename)
+                    filename)))])
+    (displayln (amps program (max-phases program)))))
