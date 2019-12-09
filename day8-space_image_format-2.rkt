@@ -44,6 +44,19 @@
   (check-equal? (layer-with-min *test-sif* 3) 1)
   (check-equal? (layer-with-min *test-sif* 1) 0))
 
+(define (decode-sif sif)
+  (array-axis-fold (sif-data sif) 0 (λ (x c) (if (= c 2) x c))))
+
+(module+ test
+  (check-equal? (decode-sif (read-sif "0222112222120000" 2 2))
+                (array #[#[0 1]
+                         #[1 0]])))
+
+(define (print-array arr)
+  (for* ([a (in-array-axis arr 0)])
+    (map (λ (x) (display (if (= x 0) " " "#"))) (array->list a))
+    (newline)))
+
 (module+ main
   (let* ([sif (command-line
               #:program "sif"
@@ -53,7 +66,5 @@
                 (open-input-file
                  filename))
                (string->number width)
-               (string->number height)))]
-         [l (layer-with-min sif 0)])
-    (* (list-ref (count-per-layer sif 1) l)
-       (list-ref (count-per-layer sif 2) l))))
+               (string->number height)))])
+    (print-array (decode-sif sif))))
