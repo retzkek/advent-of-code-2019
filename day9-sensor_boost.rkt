@@ -20,7 +20,9 @@
 (define (mem-ref prog address)
   (let* ([p (intcode-program prog)])
     (if (> address (length p))
-        (hash-ref (intcode-ext-mem prog) address)
+        (if (hash-has-key? (intcode-ext-mem prog) address)
+            (hash-ref (intcode-ext-mem prog) address)
+            0)
         (list-ref p address))))
 
 (module+ test
@@ -48,7 +50,8 @@
 (define-syntax-rule (param mode arg prog)
   (case mode
     [(0) (mem-ref prog arg)]
-    [(1) arg]))
+    [(1) arg]
+    [(2) (mem-ref prog (+ (intcode-rel-base prog) arg))]))
 
 (define-syntax-rule (op2 op prog args step modes out)
   (let* ([a (param (first modes) (second args) prog)]
@@ -69,7 +72,8 @@
   (let ([v (param (first modes) (second args) prog)])
     (cond
       [(thread? out) (thread-send out v)]
-      [(channel? out) (channel-put out v)]))
+      [(channel? out) (channel-put out v)]
+      [(port? out) (displayln v out)]))
   (exe prog (+ step 2) out))
 
 (define (op-jump f prog args step modes out)
@@ -85,7 +89,7 @@
          [dest (fourth args)])
     (exe (mem-set prog dest val) (+ step 4) out)))
 
-(define (op-rel-base f prog args step modes out)
+(define (op-rel-base prog args step modes out)
   (exe (struct-copy intcode prog [rel-base (+ (intcode-rel-base prog)
                                               (param (first modes)
                                                      (second args)
@@ -95,7 +99,7 @@
 
 (define (exe prog step out)
   (with-handlers
-    ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution. Prog:\n~a" prog)))])
+    ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution:\n~a\nprog: ~a" e prog)))])
     (let* ([args (drop (intcode-program prog) step)]
           [opmodes (first args)]
           [opcode (remainder opmodes 100)]
@@ -133,8 +137,11 @@
 (define (check-program-io program in out)
   (let* ([ch (make-channel)]
         [worker (thread (λ () (exe (read-program (open-input-string program)) 0 ch)))])
-    (thread-send worker in)
-    (check-equal? (channel-get ch) out)
+    (when in (thread-send worker in))
+    (if (list? out)
+        (for ([o (in-list out)])
+          (check-equal? (channel-get ch) o))
+        (check-equal? (channel-get ch) out))
     (thread-wait worker)))
 
 (module+ test
@@ -155,54 +162,25 @@
   (check-program-io "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
                     8 1000)
   (check-program-io "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
-                    9 1001))
+                    9 1001)
+  (check-program-io "109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99"
+                    #f
+                    '(109 1 204 -1 1001 100 1 100 1008 100 16 101 1006 101 0 99))
+  (check-program-io "1102,34915192,34915192,7,4,7,99,0"
+                    #f
+                    1219070632396864)
+  (check-program-io "104,1125899906842624,99" #f 1125899906842624))
 
-(define (make-amps program out phases [amps '()])
-  (let ([th (thread (lambda () (exe program 0 out)))])
-    (thread-send th (first phases))
-    (if (= 1 (length phases))
-        (cons th amps)
-        (make-amps program th (rest phases) (cons th amps)))))
-
-(define (feedback-amps program phases)
-  (let* ([oc (make-channel)]
-         [rc (make-channel)]
-         [amps (make-amps (read-program (open-input-string program)) oc (reverse phases))]
-         [feedback (thread (lambda ()
-                             (let loop ()
-                               (let ([v (channel-get oc)])
-                                 #;(displayln (format "oc: ~a" v))
-                                 (if (thread-dead? (first amps))
-                                                   (channel-put rc v)
-                                                   (thread-send (first amps) v))
-                               (loop)))))])
-    ;(displayln (length amps))
-    (thread-send (first amps) 0)
-    (for-each thread-wait amps)
-    (channel-get rc)))
-
-(module+ test
-  (check-eq? (feedback-amps "3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5"
-                            '(9 8 7 6 5))
-             139629729)
-  (check-eq? (feedback-amps "3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10"
-                            '(9 7 8 5 6))
-             18216))
-
-(define (max-phases program)
-  (argmax (λ (phases) (feedback-amps program phases)) (permutations (range 5 10))))
-
-(module+ test
-  (check-equal? (max-phases "3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5")
-                '(9 8 7 6 5))
-  (check-equal? (max-phases "3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10")
-                '(9 7 8 5 6)))
+(define (run-intcode prog [in #f])
+  (let* ([worker (thread (λ () (exe prog 0 (current-output-port))))])
+    (when in (thread-send worker in))
+    (thread-wait worker)))
 
 (module+ main
-  (let ([program (read-line
+  (let ([program (read-program
                   (open-input-file
                    (command-line
                     #:program "intcode"
                     #:args (filename)
                     filename)))])
-    (displayln (feedback-amps program (max-phases program)))))
+     (run-intcode program 1)))
