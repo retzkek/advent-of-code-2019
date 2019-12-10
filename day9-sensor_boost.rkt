@@ -189,4 +189,4 @@
                     #:program "intcode"
                     #:args (filename)
                     filename)))])
-     (run-intcode program 1)))
+    (run-intcode program (read))))
