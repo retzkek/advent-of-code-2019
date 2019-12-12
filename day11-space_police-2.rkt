@@ -1,6 +1,7 @@
 #lang racket
 
 (require rackunit
+         pict
          "intcode.rkt")
 
 (struct panel (x y) #:transparent)
@@ -13,7 +14,7 @@
 (define (ehpr program)
   (let* ([ch (make-channel)]
          [brain (thread (λ () (exe (read-program program) 0 ch)))]
-         [hull (make-hash)]
+         [hull (make-hash (list (cons (panel 0 0) 1)))]
          [turns (hash 'up '(left right) 'right '(up down) 'down '(right left) 'left '(down up))])
     (define (run dir x y)
       ;(displayln (list x y (panel-color hull x y)))
@@ -33,5 +34,29 @@
                          [else y]))))))
     (run 'up 0 0)))
 
+; returns ((min x) (min y) (max x) (max y))
+(define (extents hull)
+  (foldl (λ (p ex) (list (min (panel-x p) (first ex))
+                         (min (panel-y p) (second ex))
+                         (max (panel-x p) (third ex))
+                         (max (panel-y p) (fourth ex))))
+         '(0 0 0 0)
+         (hash-keys hull)))
+
+(define (draw-hull hull)
+  (let* ([ex (extents hull)]
+         [width (- (third ex) (first ex))]
+         [height (- (fourth ex) (second ex))]
+         [origin-x (+ (round (/ width 2))
+                      (if (< (first ex) 0) (- (first ex)) (first ex)))]
+         [origin-y (+ (round (/ height 2))
+                      (if (< (first ex) 0) (- (first ex)) (first ex)))])
+    (dc (λ (dc dx dy)
+          (hash-for-each hull (λ (p c) (when (= c 1)
+                                         (send dc draw-point
+                                               (+ origin-x (panel-x p))
+                                               (+ origin-y (panel-y p)))))))
+       width height)))
+
 (module+ main
-  (hash-count (ehpr (open-input-file "day11.input.txt"))))
+  (scale (draw-hull (ehpr (open-input-file "day11.input.txt"))) 4))
