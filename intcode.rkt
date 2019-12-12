@@ -20,7 +20,7 @@
 
 (define (mem-ref prog address)
   (let* ([p (intcode-program prog)])
-    (if (> address (length p))
+    (if (>= address (length p))
         (if (hash-has-key? (intcode-ext-mem prog) address)
             (hash-ref (intcode-ext-mem prog) address)
             0)
@@ -35,7 +35,7 @@
 
 (define (mem-set prog address val)
   (let* ([p (intcode-program prog)])
-    (if (> address (length p))
+    (if (>= address (length p))
         (struct-copy intcode prog [ext-mem (hash-set (intcode-ext-mem prog) address val)])
         (struct-copy intcode prog [program (append (take p address)
                                                    (list val)
@@ -59,70 +59,69 @@
     [(0) arg]
     [(2) (+ (intcode-rel-base prog) arg)]))
 
-(define-syntax-rule (op2 op prog args step modes out)
-  (let* ([a (param-value (first modes) (second args) prog)]
-         [b (param-value (second modes) (third args) prog)]
-         [dest (param-address (third modes) (fourth args) prog)])
+(define-syntax-rule (op2 op prog step modes out)
+  (let* ([a (param-value (first modes) (mem-ref prog (+ step 1)) prog)]
+         [b (param-value (second modes) (mem-ref prog (+ step 2)) prog)]
+         [dest (param-address (third modes) (mem-ref prog (+ step 3)) prog)])
     (exe (mem-set prog dest (op a b))
          (+ step 4)
          out)))
 
-(define (op-input prog args step modes out)
+(define (op-input prog step modes out)
   #;(display "> ")
   (let ([v (thread-receive)]
-        [dest (param-address (first modes) (second args) prog)])
+        [dest (param-address (first modes) (mem-ref prog (+ step 1)) prog)])
     (exe (mem-set prog dest v)
          (+ step 2)
          out)))
 
-(define (op-output prog args step modes out)
-  (let ([v (param-value (first modes) (second args) prog)])
+(define (op-output prog step modes out)
+  (let ([v (param-value (first modes) (mem-ref prog (+ step 1)) prog)])
     (cond
       [(thread? out) (thread-send out v)]
       [(channel? out) (channel-put out v)]
       [(port? out) (displayln v out)]))
   (exe prog (+ step 2) out))
 
-(define (op-jump f prog args step modes out)
-  (exe prog (if (f (param-value (first modes) (second args) prog))
-                (param-value (second modes) (third args) prog)
+(define (op-jump f prog step modes out)
+  (exe prog (if (f (param-value (first modes) (mem-ref prog (+ step 1)) prog))
+                (param-value (second modes) (mem-ref prog (+ step 2)) prog)
                 (+ step 3))
        out))
 
-(define (op-cmp f prog args step modes out)
-  (let* ([a (param-value (first modes) (second args) prog)]
-         [b (param-value (second modes) (third args) prog)]
+(define (op-cmp f prog step modes out)
+  (let* ([a (param-value (first modes) (mem-ref prog (+ step 1)) prog)]
+         [b (param-value (second modes) (mem-ref prog (+ step 2)) prog)]
          [val (if (f a b) 1 0)]
-         [dest (param-address (third modes) (fourth args) prog)])
+         [dest (param-address (third modes) (mem-ref prog (+ step 3)) prog)])
     (exe (mem-set prog dest val) (+ step 4) out)))
 
-(define (op-rel-base prog args step modes out)
+(define (op-rel-base prog step modes out)
   (exe (struct-copy intcode prog [rel-base (+ (intcode-rel-base prog)
                                               (param-value (first modes)
-                                                           (second args)
+                                                           (mem-ref prog (+ step 1))
                                                            prog))])
        (+ step 2)
        out))
 
 (define (exe prog step out)
   (with-handlers
-    ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution:\n~a\nprog: ~a\nstep: ~a\nprog at step: ~a" e prog step (drop (intcode-program prog) step))))])
-    (let* ([args (drop (intcode-program prog) step)]
-          [opmodes (first args)]
-          [opcode (remainder opmodes 100)]
-          [modecode (quotient opmodes 100)]
-          [modes (int->list modecode 3)])
+    ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution:\n~a\nprog: ~a\nstep: ~a" e prog step)))])
+    (let* ([opmodes (mem-ref prog step)]
+           [opcode (remainder opmodes 100)]
+           [modecode (quotient opmodes 100)]
+           [modes (int->list modecode 3)])
      (case opcode
        [(99) prog]
-       [(1) (op2 + prog args step modes out)]
-       [(2) (op2 * prog args step modes out)]
-       [(3) (op-input prog args step modes out)]
-       [(4) (op-output prog args step modes out)]
-       [(5) (op-jump (λ (x) (not (eq? x 0))) prog args step modes out)]
-       [(6) (op-jump (λ (x) (eq? x 0)) prog args step modes out)]
-       [(7) (op-cmp < prog args step modes out)]
-       [(8) (op-cmp = prog args step modes out)]
-       [(9) (op-rel-base prog args step modes out)]))))
+       [(1) (op2 + prog step modes out)]
+       [(2) (op2 * prog step modes out)]
+       [(3) (op-input prog step modes out)]
+       [(4) (op-output prog step modes out)]
+       [(5) (op-jump (λ (x) (not (eq? x 0))) prog step modes out)]
+       [(6) (op-jump (λ (x) (eq? x 0)) prog step modes out)]
+       [(7) (op-cmp < prog step modes out)]
+       [(8) (op-cmp = prog step modes out)]
+       [(9) (op-rel-base prog step modes out)]))))
 
 (define (read-program ip)
   (intcode (map string->number (string-split (read-line ip) ",")) 0 (make-immutable-hash)))
@@ -139,7 +138,8 @@
   (check-program "1,0,0,0,99" "2,0,0,0,99")
   (check-program "2,3,0,3,99" "2,3,0,6,99")
   (check-program "2,4,4,5,99,0" "2,4,4,5,99,9801")
-  (check-program "1,1,1,4,99,5,6,0,99" "30,1,1,4,2,5,6,0,99"))
+  (check-program "1,1,1,4,99,5,6,0,99" "30,1,1,4,2,5,6,0,99")
+  (check-program "1101,44,55,4" "1101,44,55,4"))
 
 (define (check-program-io program in out)
   (let* ([ch (make-channel)]

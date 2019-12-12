@@ -46,16 +46,12 @@
 (define (draw-hull hull)
   (let* ([ex (extents hull)]
          [width (- (third ex) (first ex))]
-         [height (- (fourth ex) (second ex))]
-         [origin-x (+ (round (/ width 2))
-                      (if (< (first ex) 0) (- (first ex)) (first ex)))]
-         [origin-y (+ (round (/ height 2))
-                      (if (< (first ex) 0) (- (first ex)) (first ex)))])
+         [height (- (fourth ex) (second ex))])
     (dc (λ (dc dx dy)
           (hash-for-each hull (λ (p c) (when (= c 1)
                                          (send dc draw-point
-                                               (+ origin-x (panel-x p))
-                                               (+ origin-y (panel-y p)))))))
+                                               (+ (first ex) (panel-x p))
+                                               (+ (second ex) (panel-y p)))))))
        width height)))
 
 (module+ main
