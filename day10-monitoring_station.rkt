@@ -128,4 +128,4 @@
              (command-line
               #:args (filename)
               filename)))])
-    (displayln (apply max (map (λ (a) (count-can-see a m)) m)))))
+    (displayln (argmax (λ (x) (cdr x)) (map (λ (a) (cons a (count-can-see a m))) m)))))
