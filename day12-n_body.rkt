@@ -114,3 +114,24 @@ pos=<x= 2, y= 0, z= 4>, vel=<x= 1, y=-1, z=-1>")))
       (check-equal? moons (first steps))
       (check-steps (step moons) (rest steps))))
   (check-steps test-moons test-steps))
+
+(define (moon-energy a-moon)
+  (define (pe a-moon)
+    (apply + (map abs (vector->list (moon-position a-moon)))))
+  (define (ke a-moon)
+    (apply + (map abs (vector->list (moon-velocity a-moon)))))
+  (* (pe a-moon) (ke a-moon)))
+
+(define (total-energy moons)
+  (apply + (map moon-energy moons)))
+
+(module+ test
+  (check-eq? (total-energy (last test-steps)) 179))
+
+(define (n-steps moons n)
+  (if (<= n 0) moons (n-steps (step moons) (- n 1))))
+
+(module+ main
+  (define moons (read-moons (open-input-file "day12.input.txt")))
+  (displayln moons)
+  (displayln (total-energy (n-steps moons 1000))))
