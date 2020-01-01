@@ -4,6 +4,7 @@
 
 (provide (struct-out intcode)
          read-program
+         mem-set
          exe)
 
 (define (int->list n len)
@@ -20,11 +21,11 @@
 
 (define (mem-ref prog address)
   (let* ([p (intcode-program prog)])
-    (if (>= address (length p))
+    (if (>= address (vector-length p))
         (if (hash-has-key? (intcode-ext-mem prog) address)
             (hash-ref (intcode-ext-mem prog) address)
             0)
-        (list-ref p address))))
+        (vector-ref p address))))
 
 (module+ test
   (let ([p (intcode '(1 2 3) 0 (make-hash '((99 . 4))))])
@@ -35,11 +36,13 @@
 
 (define (mem-set prog address val)
   (let* ([p (intcode-program prog)])
-    (if (>= address (length p))
-        (struct-copy intcode prog [ext-mem (hash-set (intcode-ext-mem prog) address val)])
-        (struct-copy intcode prog [program (append (take p address)
-                                                   (list val)
-                                                   (drop p (+ address 1)))]))))
+    (if (>= address (vector-length p))
+        (begin
+          (hash-set! (intcode-ext-mem prog) address val)
+          prog)
+        (begin
+          (vector-set! (intcode-program prog) address val)
+          prog))))
 
 (module+ test
   (let ([p (intcode '(1 2 3) 0 (make-immutable-hash))])
@@ -63,17 +66,16 @@
   (let* ([a (param-value (first modes) (mem-ref prog (+ step 1)) prog)]
          [b (param-value (second modes) (mem-ref prog (+ step 2)) prog)]
          [dest (param-address (third modes) (mem-ref prog (+ step 3)) prog)])
-    (exe (mem-set prog dest (op a b))
-         (+ step 4)
-         out)))
+    (mem-set prog dest (op a b))))
 
 (define (op-input prog step modes out)
-  #;(display "> ")
+  (cond
+    [(thread? out) (thread-send out -99)]
+    [(channel? out) (begin (channel-put out -99) (channel-put out -99) (channel-put out -99))]
+    [(port? out) (displayln ">" out)])
   (let ([v (thread-receive)]
         [dest (param-address (first modes) (mem-ref prog (+ step 1)) prog)])
-    (exe (mem-set prog dest v)
-         (+ step 2)
-         out)))
+    (mem-set prog dest v)))
 
 (define (op-output prog step modes out)
   (let ([v (param-value (first modes) (mem-ref prog (+ step 1)) prog)])
@@ -81,28 +83,25 @@
       [(thread? out) (thread-send out v)]
       [(channel? out) (channel-put out v)]
       [(port? out) (displayln v out)]))
-  (exe prog (+ step 2) out))
+  prog)
 
 (define (op-jump f prog step modes out)
-  (exe prog (if (f (param-value (first modes) (mem-ref prog (+ step 1)) prog))
+  (if (f (param-value (first modes) (mem-ref prog (+ step 1)) prog))
                 (param-value (second modes) (mem-ref prog (+ step 2)) prog)
-                (+ step 3))
-       out))
+                (+ step 3)))
 
 (define (op-cmp f prog step modes out)
   (let* ([a (param-value (first modes) (mem-ref prog (+ step 1)) prog)]
          [b (param-value (second modes) (mem-ref prog (+ step 2)) prog)]
          [val (if (f a b) 1 0)]
          [dest (param-address (third modes) (mem-ref prog (+ step 3)) prog)])
-    (exe (mem-set prog dest val) (+ step 4) out)))
+    (mem-set prog dest val)))
 
 (define (op-rel-base prog step modes out)
-  (exe (struct-copy intcode prog [rel-base (+ (intcode-rel-base prog)
-                                              (param-value (first modes)
-                                                           (mem-ref prog (+ step 1))
-                                                           prog))])
-       (+ step 2)
-       out))
+  (struct-copy intcode prog [rel-base (+ (intcode-rel-base prog)
+                                         (param-value (first modes)
+                                                      (mem-ref prog (+ step 1))
+                                                      prog))]))
 
 (define (exe prog step out)
   (with-handlers
@@ -113,18 +112,18 @@
            [modes (int->list modecode 3)])
      (case opcode
        [(99) prog]
-       [(1) (op2 + prog step modes out)]
-       [(2) (op2 * prog step modes out)]
-       [(3) (op-input prog step modes out)]
-       [(4) (op-output prog step modes out)]
-       [(5) (op-jump (λ (x) (not (eq? x 0))) prog step modes out)]
-       [(6) (op-jump (λ (x) (eq? x 0)) prog step modes out)]
-       [(7) (op-cmp < prog step modes out)]
-       [(8) (op-cmp = prog step modes out)]
-       [(9) (op-rel-base prog step modes out)]))))
+       [(1) (exe (op2 + prog step modes out) (+ step 4) out)]
+       [(2) (exe (op2 * prog step modes out) (+ step 4) out)]
+       [(3) (exe (op-input prog step modes out) (+ step 2) out)]
+       [(4) (exe (op-output prog step modes out) (+ step 2) out)]
+       [(5) (exe prog (op-jump (λ (x) (not (eq? x 0))) prog step modes out) out)]
+       [(6) (exe prog (op-jump (λ (x) (eq? x 0)) prog step modes out) out)]
+       [(7) (exe (op-cmp < prog step modes out) (+ step 4) out)]
+       [(8) (exe (op-cmp = prog step modes out) (+ step 4) out)]
+       [(9) (exe (op-rel-base prog step modes out) (+ step 2) out)]))))
 
 (define (read-program ip)
-  (intcode (map string->number (string-split (read-line ip) ",")) 0 (make-immutable-hash)))
+  (intcode (list->vector (map string->number (string-split (read-line ip) ","))) 0 (make-hash)))
 
 (module+ test
   (check-equal? (intcode-program (read-program (open-input-string "1,2,3"))) '(1 2 3)))
