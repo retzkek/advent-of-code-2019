@@ -94,29 +94,34 @@
 
 (define (game program canvas [block-size 10])
   (define ch (make-channel))
-  (define brain (thread (λ () (exe (mem-set (read-program program) 0 2) 0 ch))))
+  (define brain (thread (λ ()
+                          (define prog (new intcode% [program program] [output ch]))
+                          (send prog poke! 0 2)
+                          (send prog exe 0))))
   (define board (make-hash))
   (do ([ball-x 0]
        [paddle-x 0]
-       [x 0 (sync ch (thread-dead-evt brain))]
-       [y 0 (sync ch (thread-dead-evt brain))]
-       [tile-num 0 (sync ch (thread-dead-evt brain))])
-    ((thread-dead? brain))
+       [x (channel-get ch) (sync ch (thread-dead-evt brain))])
+      ((thread-dead? brain))
     (if (thread-dead? brain)
-        tile-num
+        0
         (begin
           ;(displayln (format "~a ~a ~a" x y tile-num))
           (cond
             [(eq? x -1)
+             (define y (sync ch (thread-dead-evt brain)))
+             (define tile-num (sync ch (thread-dead-evt brain)))
              (send msg set-label (format "Score: ~a" tile-num))]
             [(eq? x -99)
              (send canvas flush)
              ;(sleep 1)
-             (thread-send brain (cond
-                                  [(< ball-x paddle-x) -1]
-                                  [(> ball-x paddle-x) 1]
-                                  [else 0]))]
+             (channel-put ch (cond
+                               [(< ball-x paddle-x) -1]
+                               [(> ball-x paddle-x) 1]
+                               [else 0]))]
             [else
+             (define y (sync ch (thread-dead-evt brain)))
+             (define tile-num (sync ch (thread-dead-evt brain)))
              (when (eq? tile-num 3) (set! paddle-x x))
              (when (eq? tile-num 4) (set! ball-x x))
              (draw-tile (send canvas get-dc) (* x block-size) (* y block-size) block-size block-size tile-num)

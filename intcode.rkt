@@ -2,7 +2,8 @@
 
 (require rackunit)
 
-(provide (struct-out intcode)
+(provide intcode%
+         (struct-out intcode)
          read-program
          mem-set
          exe)
@@ -14,6 +15,85 @@
   (check-equal? (int->list 1234 4) '(4 3 2 1))
   (check-equal? (int->list 4 4) '(4 0 0 0)))
 
+(define intcode%
+  (class object%
+    (init program output)
+    (define source (cond [(list? program) program]
+                         [(string? program) (read-program (open-input-string program))]
+                         [(port? program) (read-program program)]))
+    (define mem (make-hash (map cons (range (length source)) source)))
+    (define out output)
+    (define rel-base 0)
+
+    (super-new)
+
+    (define/private (read-program ip)
+      (map string->number (string-split (read-line ip) ",")))
+    (define/public (peek addr)
+      (hash-ref mem addr))
+    (define/public (poke! addr v)
+      (hash-set! mem addr v))
+    (define/private (pval mode arg)
+      (case mode
+        [(0) (peek arg)]
+        [(1) arg]
+        [(2) (peek (+ rel-base arg))]))
+    (define/private (paddr mode arg)
+      (case mode
+        [(0) arg]
+        [(2) (+ rel-base arg)]))
+    (define/private (op-binary op addr modes)
+      (poke! (paddr (third modes) (peek (+ 3 addr)))
+             (op (pval (first modes) (peek (add1 addr)))
+                 (pval (second modes) (peek (+ 2 addr))))))
+    (define/private (op-input addr modes)
+      (cond
+        [(thread? out) (thread-send out -99)]
+        [(channel? out) (channel-put out -99)]
+        [(port? out) (displayln ">" out)])
+      (poke! (paddr (first modes) (peek (add1 addr)))
+             (cond
+               [(thread? out) (thread-receive)]
+               [(channel? out) (channel-get out)]
+               [(port? out) (read (current-input-port))])))
+    (define/private (op-output addr modes)
+      (let ([v (pval (first modes) (peek (add1 addr)))])
+        (cond
+          [(thread? out) (thread-send out v)]
+          [(channel? out) (channel-put out v)]
+          [(port? out) (displayln v out)])))
+    (define/private (op-jump f addr modes)
+      (if (f (pval (first modes) (peek (add1 addr))))
+          (pval (second modes) (peek (+ addr 2)))
+          (+ addr 3)))
+    (define/private (op-cmp f addr modes)
+      (poke! (paddr (third modes) (peek (+ addr 3)))
+             (if (f (pval (first modes) (peek (add1 addr)))
+                    (pval (second modes) (peek (+ 2 addr))))
+                 1
+                 0)))
+    (define/private (op-rel-base addr modes)
+      (set! rel-base (+ rel-base (pval (first modes) (peek (add1 addr))))))
+    (define/private (mem->list)
+      (hash-map (λ (_ v) v) mem))
+    (define/public (exe addr)
+      (with-handlers
+        ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution:\n~a\nsource: ~a\naddress: ~a" e source addr)))])
+        (let* ([opmodes (peek addr)]
+               [opcode (remainder opmodes 100)]
+               [modecode (quotient opmodes 100)]
+               [modes (int->list modecode 3)])
+          (case opcode
+            [(99) (mem->list)]
+            [(1) (op-binary + addr modes) (exe (+ addr 4))]
+            [(2) (op-binary * addr modes) (exe (+ addr 4))]
+            [(3) (op-input addr modes) (exe (+ addr 2))]
+            [(4) (op-output addr modes) (exe (+ addr 2))]
+            [(5) (exe (op-jump (λ (x) (not (eq? x 0))) addr modes))]
+            [(6) (exe (op-jump (λ (x) (eq? x 0)) addr modes))]
+            [(7) (op-cmp < addr modes) (exe (+ addr 4))]
+            [(8) (op-cmp = addr modes) (exe (+ addr 4))]
+            [(9) (op-rel-base addr modes) (exe (+ addr 2))]))))))
 
 (struct intcode
   (program rel-base ext-mem)
@@ -125,7 +205,7 @@
 (define (read-program ip)
   (intcode (list->vector (map string->number (string-split (read-line ip) ","))) 0 (make-hash)))
 
-(module+ test
+(module+ testp
   (check-equal? (intcode-program (read-program (open-input-string "1,2,3"))) '(1 2 3)))
 
 (define (check-program prog newprog)
