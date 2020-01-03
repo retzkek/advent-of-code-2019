@@ -31,23 +31,27 @@
            [else " "]))
         (when (eq? x max-x) (newline))))
 
-    (define/private (n x y) (cons x (add1 y)))
-    (define/private (s x y) (cons x (sub1 y)))
-    (define/private (e x y) (cons (add1 x) y))
-    (define/private (w x y) (cons (sub1 x) y))
+    (define/private (mv dir x y)
+      (case dir
+        ((N) (cons x (add1 y)))
+        ((S) (cons x (sub1 y)))
+        ((E) (cons (add1 x) y))
+        ((W) (cons (sub1 x) y))
+        ((_) (cons x y))))
+
     (define/private (move dir)
       (when (not (eq? -99 (sync/timeout 10 ch)))
         (raise (error "expected prompt")))
       (channel-put ch (hash-ref dirs dir))
       (define r (channel-get ch))
       (case dir
-        [(N) (hash-set! map (n cur-x cur-y) r)
+        [(N) (hash-set! map (mv 'N cur-x cur-y) r)
              (when (> (add1 cur-y) max-y) (set! max-y (add1 cur-y)))]
-        [(S) (hash-set! map (s cur-x cur-y) r)
+        [(S) (hash-set! map (mv 'S cur-x cur-y) r)
              (when (< (sub1 cur-y) min-y) (set! min-y (sub1 cur-y)))]
-        [(W) (hash-set! map (w cur-x cur-y) r)
+        [(W) (hash-set! map (mv 'W cur-x cur-y) r)
              (when (< (sub1 cur-x) min-x) (set! min-x (sub1 cur-x)))]
-        [(E) (hash-set! map (e cur-x cur-y) r)
+        [(E) (hash-set! map (mv 'E cur-x cur-y) r)
              (when (> (add1 cur-x) max-x) (set! max-x (add1 cur-x)))])
       (if (eq? r 0)
           r
@@ -61,6 +65,14 @@
               [(E) (set! cur-x (add1 cur-x))])
             r)))
 
+    (define/private (maybe-explore? check-dir go-dir)
+      (and (eq? cur-dir check-dir)
+           (not (hash-has-key? map (mv go-dir cur-x cur-y)))
+           (< 0 (move go-dir))))
+    (define/private (maybe-backtrack? check-dir go-dir)
+      (and (eq? cur-dir check-dir)
+           (< 0 (move go-dir))))
+
     ;; mapping-based search
     (define/public (map-search)
       (define (go)
@@ -72,82 +84,40 @@
           [(eq? 2 (hash-ref map (cons cur-x cur-y)))
            (cons cur-x cur-y)]
           ;; explore forward
-          [(and (eq? cur-dir 'N)
-                (not (hash-has-key? map (n cur-x cur-y)))
-                (< 0 (move 'N)))
-           (go)]
-          [(and (eq? cur-dir 'S)
-                (not (hash-has-key? map (s cur-x cur-y)))
-                (< 0 (move 'S)))
-           (go)]
-          [(and (eq? cur-dir 'W)
-                (not (hash-has-key? map (w cur-x cur-y)))
-                (< 0 (move 'W)))
-           (go)]
-          [(and (eq? cur-dir 'E)
-                (not (hash-has-key? map (e cur-x cur-y)))
-                (< 0 (move 'E)))
-           (go)]
+          [(maybe-explore? 'N 'N) (go)]
+          [(maybe-explore? 'S 'S) (go)]
+          [(maybe-explore? 'W 'W) (go)]
+          [(maybe-explore? 'E 'E) (go)]
           ;; explore right
-          [(and (eq? cur-dir 'N)
-                (not (hash-has-key? map (e cur-x cur-y)))
-                (< 0 (move 'E)))
-           (go)]
-          [(and (eq? cur-dir 'S)
-                (not (hash-has-key? map (w cur-x cur-y)))
-                (< 0 (move 'W)))
-           (go)]
-          [(and (eq? cur-dir 'E)
-                (not (hash-has-key? map (s cur-x cur-y)))
-                (< 0 (move 'S)))
-           (go)]
-          [(and (eq? cur-dir 'W)
-                (not (hash-has-key? map (n cur-x cur-y)))
-                (< 0 (move 'N)))
-           (go)]
+          [(maybe-explore? 'N 'E) (go)]
+          [(maybe-explore? 'S 'W) (go)]
+          [(maybe-explore? 'E 'S) (go)]
+          [(maybe-explore? 'W 'N) (go)]
           ;; explore left
-          [(and (eq? cur-dir 'N)
-                (not (hash-has-key? map (w cur-x cur-y)))
-                (< 0 (move 'W)))
-           (go)]
-          [(and (eq? cur-dir 'S)
-                (not (hash-has-key? map (e cur-x cur-y)))
-                (< 0 (move 'E)))
-           (go)]
-          [(and (eq? cur-dir 'E)
-                (not (hash-has-key? map (n cur-x cur-y)))
-                (< 0 (move 'N)))
-           (go)]
-          [(and (eq? cur-dir 'W)
-                (not (hash-has-key? map (s cur-x cur-y)))
-                (< 0 (move 'S)))
-           (go)]
+          [(maybe-explore? 'N 'W) (go)]
+          [(maybe-explore? 'S 'E) (go)]
+          [(maybe-explore? 'E 'N) (go)]
+          [(maybe-explore? 'W 'S) (go)]
           ;; backtrack forward
-          [(and (eq? cur-dir 'N)
-                (< 0 (move 'N)))
-           (go)]
-          [(and (eq? cur-dir 'S)
-                (< 0 (move 'S)))
-           (go)]
-          [(and (eq? cur-dir 'E)
-                (< 0 (move 'E)))
-           (go)]
-          [(and (eq? cur-dir 'W)
-                (< 0 (move 'W)))
-           (go)]
-          ;; backtrack turn
-          [(and (not (eq? cur-dir 'N))
-                (< 0 (move 'N)))
-           (go)]
-          [(and (not (eq? cur-dir 'S))
-                (< 0 (move 'S)))
-           (go)]
-          [(and (not (eq? cur-dir 'E))
-                (< 0 (move 'E)))
-           (go)]
-          [(and (not (eq? cur-dir 'W))
-                (< 0 (move 'W)))
-           (go)]
+          [(maybe-backtrack? 'N 'N) (go)]
+          [(maybe-backtrack? 'S 'S) (go)]
+          [(maybe-backtrack? 'W 'W) (go)]
+          [(maybe-backtrack? 'E 'E) (go)]
+          ;; backtrack left
+          [(maybe-backtrack? 'N 'W) (go)]
+          [(maybe-backtrack? 'S 'E) (go)]
+          [(maybe-backtrack? 'W 'S) (go)]
+          [(maybe-backtrack? 'E 'N) (go)]
+          ;; backtrack right
+          [(maybe-backtrack? 'N 'E) (go)]
+          [(maybe-backtrack? 'S 'W) (go)]
+          [(maybe-backtrack? 'W 'N) (go)]
+          [(maybe-backtrack? 'E 'S) (go)]
+          ;; backtrack back
+          [(maybe-backtrack? 'N 'S) (go)]
+          [(maybe-backtrack? 'S 'N) (go)]
+          [(maybe-backtrack? 'W 'E) (go)]
+          [(maybe-backtrack? 'E 'W) (go)]
           [else (raise (error "don't know where to go next!"))]))
       (go))
 
