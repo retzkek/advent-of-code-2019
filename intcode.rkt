@@ -30,7 +30,9 @@
     (define/private (read-program ip)
       (map string->number (string-split (read-line ip) ",")))
     (define/public (peek addr)
-      (hash-ref mem addr))
+      (if (hash-has-key? mem addr)
+          (hash-ref mem addr)
+          0))
     (define/public (poke! addr v)
       (hash-set! mem addr v))
     (define/private (pval mode arg)
@@ -75,10 +77,10 @@
     (define/private (op-rel-base addr modes)
       (set! rel-base (+ rel-base (pval (first modes) (peek (add1 addr))))))
     (define/private (mem->list)
-      (hash-map (λ (_ v) v) mem))
+      (hash-map mem (λ (_ v) v) #t))
     (define/public (exe addr)
       (with-handlers
-        ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution:\n~a\nsource: ~a\naddress: ~a" e source addr)))])
+        ([exn:fail? (λ (e) (displayln (format "got exception during intcode execution:\n~a\nsource: ~a\naddress: ~a" e (mem->list) addr)))])
         (let* ([opmodes (peek addr)]
                [opcode (remainder opmodes 100)]
                [modecode (quotient opmodes 100)]
@@ -263,10 +265,12 @@
     (thread-wait worker)))
 
 (module+ main
-  (let ([program (read-program
-                  (open-input-file
-                   (command-line
+  (let* ([filename (command-line
                     #:program "intcode"
                     #:args (filename)
-                    filename)))])
-    (run-intcode program (read))))
+                    filename)]
+         [program (open-input-file filename)]
+         [interp (new intcode%
+                      [output (current-output-port)]
+                      [program program])])
+    (send interp exe 0)))
