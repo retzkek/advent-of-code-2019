@@ -1,6 +1,7 @@
 #lang racket
 
-(require "intcode.rkt")
+(require "intcode.rkt"
+         charterm)
 
 (define repair-droid%
   (class intcode%
@@ -16,73 +17,116 @@
     (define min-y 0)
     (define max-y 0)
     (define cur-z 1)
-    (define map (make-hash))
+
+    (define droid-map (make-hash))
+    (define o2 9999)
     (define/private (draw-map)
       (for* ([y (in-range max-y (sub1 min-y) -1)]
              [x (in-range min-x (add1 max-x))])
         (display
          (cond
-           [(and (eq? x cur-x) (eq? y cur-y)) "*"]
-           [(hash-has-key? map (cons x y))
-            (case (hash-ref map (cons x y))
-              ((0) "#")
-              ((1) ".")
-              ((2) "@"))]
+           [(and (eq? x cur-x) (eq? y cur-y)) "@"]
+           [(hash-has-key? droid-map (cons x y))
+            (case (get-map x y)
+              ((-1) "#")
+              ((o2) "$")
+              (else (get-map x y)))]
            [else " "]))
         (when (eq? x max-x) (newline))))
-
+    (define/private (set-map! x y v)
+      (hash-set! droid-map (cons x y) v)
+      (when (> y max-y) (set! max-y y))
+      (when (< y min-y) (set! min-y y))
+      (when (> x max-x) (set! max-x x))
+      (when (< x min-x) (set! min-x x))
+      v)
+    (define/private (get-map x y)
+      (define key (cons x y))
+      (if (hash-has-key? droid-map key)
+          (hash-ref droid-map key)
+          #f))
     (define/private (mv dir x y)
       (case dir
         ((N) (cons x (add1 y)))
         ((S) (cons x (sub1 y)))
         ((E) (cons (add1 x) y))
         ((W) (cons (sub1 x) y))
-        ((_) (cons x y))))
+        (else (cons x y))))
 
     (define/private (move dir)
       (when (not (eq? -99 (sync/timeout 10 ch)))
         (raise (error "expected prompt")))
       (channel-put ch (hash-ref dirs dir))
       (define r (channel-get ch))
-      (case dir
-        [(N) (hash-set! map (mv 'N cur-x cur-y) r)
-             (when (> (add1 cur-y) max-y) (set! max-y (add1 cur-y)))]
-        [(S) (hash-set! map (mv 'S cur-x cur-y) r)
-             (when (< (sub1 cur-y) min-y) (set! min-y (sub1 cur-y)))]
-        [(W) (hash-set! map (mv 'W cur-x cur-y) r)
-             (when (< (sub1 cur-x) min-x) (set! min-x (sub1 cur-x)))]
-        [(E) (hash-set! map (mv 'E cur-x cur-y) r)
-             (when (> (add1 cur-x) max-x) (set! max-x (add1 cur-x)))])
-      (if (eq? r 0)
-          r
-          (begin
-            (set! cur-z r)
-            (set! cur-dir dir)
-            (case dir
-              [(N) (set! cur-y (add1 cur-y))]
-              [(S) (set! cur-y (sub1 cur-y))]
-              [(W) (set! cur-x (sub1 cur-x))]
-              [(E) (set! cur-x (add1 cur-x))])
-            r)))
+      (define-values (next-x next-y)
+        (case dir
+          ((N) (values cur-x (add1 cur-y)))
+          ((S) (values cur-x (sub1 cur-y)))
+          ((W) (values (sub1 cur-x) cur-y))
+          ((E) (values (add1 cur-x) cur-y))))
+      (case r
+        ((0) (set-map! next-x next-y -1))
+        ((1 2) (set! cur-dir dir)
+             (set! cur-x next-x)
+             (set! cur-y next-y)
+             (set-map! cur-x cur-y
+                       (if (get-map cur-x cur-y)
+                           (add1 (get-map cur-x cur-y))
+                           (if (eq? r 2) o2 1)))
+             (set! cur-z (get-map cur-x cur-y))
+             cur-z)))
 
     (define/private (maybe-explore? check-dir go-dir)
       (and (eq? cur-dir check-dir)
-           (not (hash-has-key? map (mv go-dir cur-x cur-y)))
-           (< 0 (move go-dir))))
+           (not (hash-has-key? droid-map (mv go-dir cur-x cur-y)))
+           (> 0 (move go-dir))))
     (define/private (maybe-backtrack? check-dir go-dir)
       (and (eq? cur-dir check-dir)
-           (< 0 (move go-dir))))
+           (> 0 (move go-dir))))
+
+    ;; manual search
+    (define/public (manual-search)
+      (define (go)
+        (with-charterm
+          (charterm-clear-screen)
+          (charterm-cursor 0 0)
+          (charterm-inverse)
+          (charterm-display "At ")
+          (charterm-display cur-x #:width 5)
+          (charterm-display cur-y #:width 5)
+          (charterm-display "Facing ")
+          (charterm-display cur-dir)
+          (charterm-normal)
+          (charterm-cursor 1 1)
+          (hash-for-each
+           droid-map
+           (λ (loc v)
+             (charterm-cursor (- (car loc) min-x -1)
+                              (- max-y (cdr loc) -2))
+             (charterm-display
+              (cond
+                [(= (car loc) (cdr loc) 0) "O"]
+                [(and (= (car loc) cur-x) (= (cdr loc) cur-y)) "@"]
+                [(< v 0) "#"]
+                [(= v o2) "$"]
+                [else v]))))
+          (case (charterm-read-key)
+            ((up #\k) (move 'N) (go))
+            ((down #\j) (move 'S) (go))
+            ((right #\l) (move 'E) (go))
+            ((left #\h) (move 'W) (go))
+            ((escape #\q) 0))))
+      (go))
 
     ;; mapping-based search
     (define/public (map-search)
       (define (go)
-        (hash-set! map (cons cur-x cur-y) cur-z)
+        ;(hash-set! droid-map (cons cur-x cur-y) cur-z)
         (displayln (format "~a ~a ~a ~a" cur-dir cur-x cur-y cur-z))
         (draw-map)
         (sleep 0.1)
         (cond
-          [(eq? 2 (hash-ref map (cons cur-x cur-y)))
-           (cons cur-x cur-y)]
+          [(eq? 9999 (get-map cur-x cur-y)) (cons cur-x cur-y)]
           ;; explore forward
           [(maybe-explore? 'N 'N) (go)]
           [(maybe-explore? 'S 'S) (go)]
@@ -103,16 +147,16 @@
           [(maybe-backtrack? 'S 'S) (go)]
           [(maybe-backtrack? 'W 'W) (go)]
           [(maybe-backtrack? 'E 'E) (go)]
-          ;; backtrack left
-          [(maybe-backtrack? 'N 'W) (go)]
-          [(maybe-backtrack? 'S 'E) (go)]
-          [(maybe-backtrack? 'W 'S) (go)]
-          [(maybe-backtrack? 'E 'N) (go)]
           ;; backtrack right
           [(maybe-backtrack? 'N 'E) (go)]
           [(maybe-backtrack? 'S 'W) (go)]
           [(maybe-backtrack? 'W 'N) (go)]
           [(maybe-backtrack? 'E 'S) (go)]
+          ;; backtrack left
+          [(maybe-backtrack? 'N 'W) (go)]
+          [(maybe-backtrack? 'S 'E) (go)]
+          [(maybe-backtrack? 'W 'S) (go)]
+          [(maybe-backtrack? 'E 'N) (go)]
           ;; backtrack back
           [(maybe-backtrack? 'N 'S) (go)]
           [(maybe-backtrack? 'S 'N) (go)]
@@ -143,4 +187,4 @@
 
 (module+ main
   (send (new repair-droid% [program (open-input-file "day15.input.txt")])
-        map-search))
+        manual-search))
