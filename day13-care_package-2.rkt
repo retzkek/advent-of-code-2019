@@ -13,6 +13,7 @@
              [color color]))
   (send dc set-pen
         (new pen% [style 'solid]
+             [width 1]
              [color color]))
   (send dc draw-rectangle dx dy width height)
   (send dc set-brush old-brush)
@@ -25,7 +26,7 @@
         (new brush% [style 'solid]
              [color color]))
   (send dc set-pen
-        (new pen% [width 3] [color "gray"]))
+        (new pen% [width 1] [color "gray"]))
   (send dc draw-rectangle dx dy width height)
   (send dc set-brush old-brush)
   (send dc set-pen old-pen))
@@ -37,19 +38,19 @@
         (new brush% [style style]
              [color color]))
   (send dc set-pen
-        (new pen% [width 3] [color color]))
+        (new pen% [width 1] [color color]))
   (send dc draw-rounded-rectangle dx dy width height (/ (min width height) 4))
   (send dc set-brush old-brush)
   (send dc set-pen old-pen))
 
-(define (draw-paddle-tile dc dx dy width height [color "black"] [style 'vertical-hatch])
+(define (draw-paddle-tile dc dx dy width height [color "black"] [style 'solid])
   (define old-brush (send dc get-brush))
   (define old-pen (send dc get-pen))
   (send dc set-brush
         (new brush% [style style]
              [color color]))
   (send dc set-pen
-        (new pen% [width 3] [color color]))
+        (new pen% [width 1] [color color]))
   (send dc draw-rectangle dx dy width (/ height 3))
   (send dc set-brush old-brush)
   (send dc set-pen old-pen))
@@ -61,7 +62,7 @@
         (new brush% [style style]
              [color color]))
   (send dc set-pen
-        (new pen% [width 2] [color color]))
+        (new pen% [width 1] [color color]))
   (send dc draw-ellipse dx dy width height)
   (send dc set-brush old-brush)
   (send dc set-pen old-pen))
@@ -132,7 +133,7 @@
                    [height 600]))
 
 (define msg (new message% [parent frame]
-                 [label "Score: 000"]))
+                 [label "Score: 000000"]))
 
 (module+ main
   (send frame show #t)
