@@ -64,6 +64,7 @@
           ((S) (values cur-x (sub1 cur-y)))
           ((W) (values (sub1 cur-x) cur-y))
           ((E) (values (add1 cur-x) cur-y))))
+      ;(displayln (format "move ~a from ~a,~a: ~a" dir cur-x cur-y r))
       (case r
         ((0) (set-map! next-x next-y -1))
         ((1 2) (set! cur-dir dir)
@@ -79,10 +80,10 @@
     (define/private (maybe-explore? check-dir go-dir)
       (and (eq? cur-dir check-dir)
            (not (hash-has-key? droid-map (mv go-dir cur-x cur-y)))
-           (> 0 (move go-dir))))
+           (< 0 (move go-dir))))
     (define/private (maybe-backtrack? check-dir go-dir)
       (and (eq? cur-dir check-dir)
-           (> 0 (move go-dir))))
+           (< 0 (move go-dir))))
 
     ;; manual search
     (define/public (manual-search)
@@ -126,11 +127,6 @@
         (sleep 0.1)
         (cond
           [(eq? 9999 (get-map cur-x cur-y)) (cons cur-x cur-y)]
-          ;; explore forward
-          [(maybe-explore? 'N 'N) (go)]
-          [(maybe-explore? 'S 'S) (go)]
-          [(maybe-explore? 'W 'W) (go)]
-          [(maybe-explore? 'E 'E) (go)]
           ;; explore right
           [(maybe-explore? 'N 'E) (go)]
           [(maybe-explore? 'S 'W) (go)]
@@ -141,21 +137,26 @@
           [(maybe-explore? 'S 'E) (go)]
           [(maybe-explore? 'E 'N) (go)]
           [(maybe-explore? 'W 'S) (go)]
-          ;; backtrack forward
-          [(maybe-backtrack? 'N 'N) (go)]
-          [(maybe-backtrack? 'S 'S) (go)]
-          [(maybe-backtrack? 'W 'W) (go)]
-          [(maybe-backtrack? 'E 'E) (go)]
-          ;; backtrack right
-          [(maybe-backtrack? 'N 'E) (go)]
-          [(maybe-backtrack? 'S 'W) (go)]
-          [(maybe-backtrack? 'W 'N) (go)]
-          [(maybe-backtrack? 'E 'S) (go)]
+          ;; explore forward
+          [(maybe-explore? 'N 'N) (go)]
+          [(maybe-explore? 'S 'S) (go)]
+          [(maybe-explore? 'W 'W) (go)]
+          [(maybe-explore? 'E 'E) (go)]
           ;; backtrack left
           [(maybe-backtrack? 'N 'W) (go)]
           [(maybe-backtrack? 'S 'E) (go)]
           [(maybe-backtrack? 'W 'S) (go)]
           [(maybe-backtrack? 'E 'N) (go)]
+          ;; backtrack right
+          [(maybe-backtrack? 'N 'E) (go)]
+          [(maybe-backtrack? 'S 'W) (go)]
+          [(maybe-backtrack? 'W 'N) (go)]
+          [(maybe-backtrack? 'E 'S) (go)]
+          ;; backtrack forward
+          [(maybe-backtrack? 'N 'N) (go)]
+          [(maybe-backtrack? 'S 'S) (go)]
+          [(maybe-backtrack? 'W 'W) (go)]
+          [(maybe-backtrack? 'E 'E) (go)]
           ;; backtrack back
           [(maybe-backtrack? 'N 'S) (go)]
           [(maybe-backtrack? 'S 'N) (go)]
@@ -186,4 +187,4 @@
 
 (module+ main
   (send (new repair-droid% [program (open-input-file "day15.input.txt")])
-        manual-search))
+        map-search))
