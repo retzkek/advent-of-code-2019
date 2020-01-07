@@ -86,37 +86,36 @@
 
     ;; manual search
     (define/public (manual-search)
-      (define (go)
-        (with-charterm
-          (charterm-clear-screen)
-          (charterm-cursor 0 0)
-          (charterm-inverse)
-          (charterm-display "At ")
-          (charterm-display cur-x #:width 5)
-          (charterm-display cur-y #:width 5)
-          (charterm-display "Facing ")
-          (charterm-display cur-dir)
-          (charterm-normal)
-          (charterm-cursor 1 1)
-          (hash-for-each
-           droid-map
-           (λ (loc v)
-             (charterm-cursor (- (car loc) min-x -1)
-                              (- max-y (cdr loc) -2))
-             (charterm-display
-              (cond
-                [(= (car loc) (cdr loc) 0) "O"]
-                [(and (= (car loc) cur-x) (= (cdr loc) cur-y)) "@"]
-                [(< v 0) "#"]
-                [(= v o2) "$"]
-                [else v]))))
-          (case (charterm-read-key)
-            ((up #\k) (move 'N) (go))
-            ((down #\j) (move 'S) (go))
-            ((right #\l) (move 'E) (go))
-            ((left #\h) (move 'W) (go))
-            ((escape #\q) 0))))
-      (go))
+      (with-charterm
+          (do ([key #\a (charterm-read-key)])
+              ((or (eq? key `escape) (eq? key #\q)))
+            (charterm-clear-screen)
+            (charterm-cursor 0 0)
+            (charterm-inverse)
+            (charterm-display "At ")
+            (charterm-display cur-x #:width 5)
+            (charterm-display cur-y #:width 5)
+            (charterm-display "Facing ")
+            (charterm-display cur-dir)
+            (charterm-normal)
+            (charterm-cursor 1 1)
+            (hash-for-each
+             droid-map
+             (λ (loc v)
+               (charterm-cursor (- (car loc) min-x -1)
+                                (- max-y (cdr loc) -2))
+               (charterm-display
+                (cond
+                  [(= (car loc) (cdr loc) 0) "O"]
+                  [(and (= (car loc) cur-x) (= (cdr loc) cur-y)) "@"]
+                  [(< v 0) "#"]
+                  [(= v o2) "$"]
+                  [else v]))))
+            (case key
+              ((up #\k) (move 'N))
+              ((down #\j) (move 'S))
+              ((right #\l) (move 'E))
+              ((left #\h) (move 'W))))))
 
     ;; mapping-based search
     (define/public (map-search)
